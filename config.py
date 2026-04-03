@@ -16,8 +16,11 @@ DEFAULTS = {
     "sender_email": "",
     "sender_password": "",
     "printer_name": "",
-    "email_subject": "Your Photobooth Photo!",
-    "email_body_template": "Here is your photo!\n\nView: {url}\n\nEnjoy!",
+    "max_photos_per_session": 10,
+    "max_prints_per_session": 1,
+    "cleanup_days": 30,
+    "email_subject": "Your Photobooth Photos!",
+    "email_body_template": "Here are your photos!\n\nView: {url}\n\nEnjoy!",
 }
 
 
@@ -66,3 +69,16 @@ def save_config(data):
     path = _config_path()
     with open(path, "w", encoding="utf-8") as f:
         json.dump(to_save, f, indent=4, ensure_ascii=False)
+
+
+def cleanup_old_sessions(watch_folder, max_age_days):
+    """Delete session subfolders older than max_age_days."""
+    import shutil
+    import time
+    if not os.path.isdir(watch_folder):
+        return
+    now = time.time()
+    cutoff = now - (max_age_days * 86400)
+    for entry in os.scandir(watch_folder):
+        if entry.is_dir() and entry.stat().st_mtime < cutoff:
+            shutil.rmtree(entry.path, ignore_errors=True)

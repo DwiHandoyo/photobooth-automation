@@ -34,12 +34,13 @@ class _PhotoHandler(FileSystemEventHandler):
                 continue
 
 
-def start_watching(folder_path, on_new_file):
+def start_watching(folder_path, on_new_file, recursive=False):
     """Start watching a folder for new image files.
 
     Args:
         folder_path: Path to the folder to watch.
         on_new_file: Callback function called with (file_path) when a new image appears.
+        recursive: If True, also watch subfolders.
 
     Returns:
         watchdog.observers.Observer instance (call .stop() to stop watching).
@@ -47,6 +48,6 @@ def start_watching(folder_path, on_new_file):
     os.makedirs(folder_path, exist_ok=True)
     handler = _PhotoHandler(on_new_file)
     observer = Observer()
-    observer.schedule(handler, folder_path, recursive=False)
+    observer.schedule(handler, folder_path, recursive=recursive)
     observer.start()
     return observer

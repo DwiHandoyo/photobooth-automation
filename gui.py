@@ -135,6 +135,59 @@ class App(ctk.CTk):
                     command=lambda e=entry, f=is_folder: self._browse(e, f),
                 ).pack(side="left")
 
+        # Session settings
+        for key, label in [
+            ("max_photos_per_session", "Max Photos/Session"),
+            ("max_prints_per_session", "Max Prints/Session"),
+        ]:
+            s_row = ctk.CTkFrame(form, fg_color=WHITE)
+            s_row.pack(fill="x", pady=2)
+
+            ctk.CTkLabel(
+                s_row, text=f"{label}:", width=130, anchor="w",
+                font=ctk.CTkFont(family="Segoe UI", size=12),
+                text_color=DARK,
+            ).pack(side="left")
+
+            entry = ctk.CTkEntry(
+                s_row, width=80,
+                fg_color=BG, text_color=DARK,
+                border_color=BORDER, border_width=1,
+                corner_radius=8,
+                font=ctk.CTkFont(family="Segoe UI", size=12),
+            )
+            entry.insert(0, str(config.get(key, "")))
+            entry.pack(side="left", padx=(0, 6))
+            self.entries[key] = entry
+
+        # Cleanup dropdown
+        cleanup_row = ctk.CTkFrame(form, fg_color=WHITE)
+        cleanup_row.pack(fill="x", pady=2)
+
+        ctk.CTkLabel(
+            cleanup_row, text="Auto Cleanup:", width=130, anchor="w",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=DARK,
+        ).pack(side="left")
+
+        self.cleanup_var = ctk.StringVar(value=str(config.get("cleanup_days", 30)))
+        ctk.CTkOptionMenu(
+            cleanup_row, values=["30", "60", "90"],
+            variable=self.cleanup_var,
+            fg_color=BG, text_color=DARK,
+            button_color=BLUE, button_hover_color=BLUE_HOVER,
+            dropdown_fg_color=WHITE, dropdown_text_color=DARK,
+            dropdown_hover_color=BLUE_LIGHT,
+            corner_radius=8, width=80,
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkLabel(
+            cleanup_row, text="days",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=GRAY,
+        ).pack(side="left")
+
         # Printer dropdown
         printer_row = ctk.CTkFrame(form, fg_color=WHITE)
         printer_row.pack(fill="x", pady=2)
@@ -389,6 +442,7 @@ class App(ctk.CTk):
     def _save_and_start_clicked(self):
         data = {key: entry.get() for key, entry in self.entries.items()}
         data["printer_name"] = self.printer_var.get()
+        data["cleanup_days"] = int(self.cleanup_var.get())
         self._on_save(data)
         self.log("Settings saved.", "success")
         self.btn_start.configure(state="disabled")
@@ -442,4 +496,5 @@ class App(ctk.CTk):
         """Return current values from the form as a dict."""
         data = {key: entry.get() for key, entry in self.entries.items()}
         data["printer_name"] = self.printer_var.get()
+        data["cleanup_days"] = int(self.cleanup_var.get())
         return data

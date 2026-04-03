@@ -94,3 +94,58 @@ class DriveClient:
         ).execute()
 
         return f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
+
+    def create_folder_and_upload(self, folder_name, file_paths, parent_folder_id):
+        """Create a Drive folder, upload all files into it, share it, return folder URL.
+
+        Args:
+            folder_name: Name for the new Drive folder.
+            file_paths: List of local file paths to upload.
+            parent_folder_id: Parent folder ID in Drive.
+
+        Returns:
+            Shareable URL of the created Drive folder.
+        """
+        self.ensure_valid()
+
+        # Create folder
+        folder_metadata = {
+            "name": folder_name,
+            "mimeType": "application/vnd.google-apps.folder",
+        }
+        if parent_folder_id:
+            folder_metadata["parents"] = [parent_folder_id]
+
+        folder = (
+            self.service.files()
+            .create(body=folder_metadata, fields="id")
+            .execute()
+        )
+        drive_folder_id = folder["id"]
+
+        # Upload each file into the folder
+        mime_types = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".png": "image/png", ".bmp": "image/bmp",
+            ".tiff": "image/tiff", ".tif": "image/tiff",
+            ".gif": "image/gif",
+        }
+
+        for file_path in file_paths:
+            file_name = os.path.basename(file_path)
+            ext = os.path.splitext(file_name)[1].lower()
+            mime_type = mime_types.get(ext, "application/octet-stream")
+
+            file_metadata = {"name": file_name, "parents": [drive_folder_id]}
+            media = MediaFileUpload(file_path, mimetype=mime_type, resumable=True)
+            self.service.files().create(
+                body=file_metadata, media_body=media, fields="id",
+            ).execute()
+
+        # Share folder publicly
+        self.service.permissions().create(
+            fileId=drive_folder_id,
+            body={"type": "anyone", "role": "reader"},
+        ).execute()
+
+        return f"https://drive.google.com/drive/folders/{drive_folder_id}?usp=sharing"
