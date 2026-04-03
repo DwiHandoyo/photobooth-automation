@@ -9,6 +9,8 @@ from gui import App
 from watcher import start_watching
 from drive_upload import DriveClient
 from mailer import send_photo_email, verify_smtp
+from printer import list_printers, print_image
+import state
 
 
 def resolve_path(path):
@@ -27,14 +29,23 @@ class PhotoboothApp:
         self._pending_file_path = None
         self._file_queue = queue.Queue()
 
+        try:
+            printers = list_printers()
+        except Exception:
+            printers = []
+
         self.app = App(
             config=self.config,
             on_save=self.handle_save,
             on_start=self.handle_start,
             on_stop=self.handle_stop,
             on_send=self.handle_send,
+            on_print=self.handle_print,
+            on_skip=self.handle_skip,
+            printer_list=printers,
         )
         self._poll_file_queue()
+        self._poll_state()
 
     def handle_save(self, data):
         self.config.update(data)
@@ -77,6 +88,12 @@ class PhotoboothApp:
         self.observer = start_watching(watch_folder, self.on_new_file)
         self.app.log(f"👀 Watching folder: {watch_folder}", "info")
 
+    def handle_skip(self):
+        """Called when operator clicks Skip."""
+        if self._pending_file_path:
+            state.mark_handled(os.path.basename(self._pending_file_path))
+            self._pending_file_path = None
+
     def handle_stop(self):
         if self.observer:
             self.observer.stop()
@@ -93,9 +110,21 @@ class PhotoboothApp:
             file_path = self._file_queue.get_nowait()
             file_name = os.path.basename(file_path)
             self._pending_file_path = file_path
+            state.clear()
             self.app.log(f"📸 New file detected: {file_name}", "info")
             self.app.show_send_panel(file_name)
         self.app.after(200, self._poll_file_queue)
+
+    def _poll_state(self):
+        """Check if the other app (user) already handled the current photo."""
+        if self._pending_file_path:
+            handled = state.get_handled()
+            pending = os.path.basename(self._pending_file_path)
+            if handled == pending:
+                self.app.log(f"Handled by user app: {pending}", "info")
+                self.app.hide_send_panel()
+                self._pending_file_path = None
+        self.app.after(500, self._poll_state)
 
     @staticmethod
     def _extract_folder_id(value):
@@ -153,8 +182,38 @@ class PhotoboothApp:
             return
 
         self.app.log(f"✅ Done: {file_name}", "success")
-        # Hide send panel on success (must run on GUI thread)
+        state.mark_handled(file_name)
+        self._pending_file_path = None
         self.app.after(0, self.app.hide_send_panel)
+
+    def handle_print(self):
+        """Called when user clicks 'Print Photo'."""
+        if not self._pending_file_path:
+            return
+        printer_name = self.config.get("printer_name", "")
+        if not printer_name or printer_name == "No printer found":
+            self.app.show_error("Print Error", "No printer selected. Please select a printer in Settings.")
+            self.app.after(0, lambda: self.app.btn_print.configure(state="normal"))
+            return
+        file_path = self._pending_file_path
+        threading.Thread(
+            target=self._do_print,
+            args=(file_path, printer_name),
+            daemon=True,
+        ).start()
+
+    def _do_print(self, file_path, printer_name):
+        """Print the photo (runs in background thread)."""
+        file_name = os.path.basename(file_path)
+        try:
+            print_image(file_path, printer_name)
+            self.app.log(f"Printed: {file_name} -> {printer_name}", "success")
+            self.app.after(0, lambda: self.app.btn_print.configure(state="normal"))
+        except Exception as e:
+            error_msg = f"Print failed: {e}"
+            self.app.log(f"ERROR: {error_msg}", "error")
+            self.app.after(0, lambda: self.app.show_error("Print Error", error_msg))
+            self.app.after(0, lambda: self.app.btn_print.configure(state="normal"))
 
     def _re_enable_send(self):
         """Re-enable the send button on error so user can retry."""

@@ -15,6 +15,7 @@ DEFAULTS = {
     "smtp_port": 465,
     "sender_email": "",
     "sender_password": "",
+    "printer_name": "",
     "email_subject": "Your Photobooth Photo!",
     "email_body_template": "Here is your photo!\n\nView: {url}\n\nEnjoy!",
 }

@@ -10,6 +10,7 @@ build/
 credentials.json
 token.json
 config.json
+state.json
 
 # IDE
 .vscode/

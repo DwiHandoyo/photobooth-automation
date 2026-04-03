@@ -19,7 +19,8 @@ BORDER = "#E2E8F0"
 
 
 class App(ctk.CTk):
-    def __init__(self, config, on_save, on_start, on_stop, on_send):
+    def __init__(self, config, on_save, on_start, on_stop, on_send, on_print,
+                 on_skip=None, printer_list=None):
         """Create the Photobooth Automation GUI.
 
         Args:
@@ -28,10 +29,12 @@ class App(ctk.CTk):
             on_start: Callback() when Start is clicked.
             on_stop: Callback() when Stop is clicked.
             on_send: Callback(email) when Send is clicked with recipient email.
+            on_print: Callback() when Print is clicked.
+            printer_list: List of available printer names.
         """
         super().__init__()
         self.title("Photobooth Automation")
-        self.geometry("700x760")
+        self.geometry("700x750")
         self.resizable(False, False)
         self.configure(fg_color=BG)
 
@@ -39,12 +42,14 @@ class App(ctk.CTk):
         self._on_start = on_start
         self._on_stop = on_stop
         self._on_send = on_send
+        self._on_print = on_print
+        self._on_skip = on_skip
+        self._printer_list = printer_list or []
         self._log_queue = queue.Queue()
         self._pending_file = None
 
         self._build_header()
         self._build_settings_frame(config)
-        self._build_controls_frame()
         self._build_send_frame()
         self._build_log_frame()
         self._build_status_bar()
@@ -130,34 +135,50 @@ class App(ctk.CTk):
                     command=lambda e=entry, f=is_folder: self._browse(e, f),
                 ).pack(side="left")
 
-        ctk.CTkButton(
-            card, text="Save Settings", width=180, height=36,
-            fg_color=BLUE, hover_color=BLUE_HOVER,
-            text_color=WHITE, corner_radius=10,
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            command=self._save_clicked,
-        ).pack(pady=(8, 14))
+        # Printer dropdown
+        printer_row = ctk.CTkFrame(form, fg_color=WHITE)
+        printer_row.pack(fill="x", pady=2)
 
-    # ── Controls ──
+        ctk.CTkLabel(
+            printer_row, text="Printer:", width=130, anchor="w",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=DARK,
+        ).pack(side="left")
 
-    def _build_controls_frame(self):
-        frame = ctk.CTkFrame(self, fg_color=BG)
-        frame.pack(fill="x", padx=16, pady=(4, 4))
+        printer_values = self._printer_list if self._printer_list else ["No printer found"]
+        saved_printer = config.get("printer_name", "")
+        self.printer_var = ctk.StringVar(
+            value=saved_printer if saved_printer in printer_values else (
+                printer_values[0] if printer_values else ""
+            )
+        )
+        self.printer_dropdown = ctk.CTkOptionMenu(
+            printer_row, values=printer_values,
+            variable=self.printer_var,
+            fg_color=BG, text_color=DARK,
+            button_color=BLUE, button_hover_color=BLUE_HOVER,
+            dropdown_fg_color=WHITE, dropdown_text_color=DARK,
+            dropdown_hover_color=BLUE_LIGHT,
+            corner_radius=8, width=320,
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+        )
+        self.printer_dropdown.pack(side="left", padx=(0, 6), expand=True, fill="x")
 
-        btn_row = ctk.CTkFrame(frame, fg_color=BG)
-        btn_row.pack(fill="x")
+        # Save & Start / Stop buttons
+        btn_row = ctk.CTkFrame(card, fg_color=WHITE)
+        btn_row.pack(pady=(10, 14))
 
         self.btn_start = ctk.CTkButton(
-            btn_row, text="  Start Watching", width=180, height=40,
+            btn_row, text="Save & Start", width=180, height=40,
             fg_color=BLUE, hover_color=BLUE_HOVER,
             text_color=WHITE, corner_radius=10,
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            command=self._start_clicked,
+            command=self._save_and_start_clicked,
         )
         self.btn_start.pack(side="left", padx=(0, 10))
 
         self.btn_stop = ctk.CTkButton(
-            btn_row, text="  Stop", width=120, height=40,
+            btn_row, text="Stop", width=100, height=40,
             fg_color=WHITE, hover_color=BLUE_LIGHT,
             text_color=BLUE, corner_radius=10,
             border_color=BORDER, border_width=1,
@@ -165,14 +186,14 @@ class App(ctk.CTk):
             command=self._stop_clicked,
         )
         self.btn_stop.configure(state="disabled")
-        self.btn_stop.pack(side="left")
+        self.btn_stop.pack(side="left", padx=(0, 10))
 
         self.status_dot = ctk.CTkLabel(
             btn_row, text="Idle",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=GRAY,
         )
-        self.status_dot.pack(side="right", padx=(0, 4))
+        self.status_dot.pack(side="left")
 
     # ── Send Panel ──
 
@@ -237,6 +258,20 @@ class App(ctk.CTk):
             command=self._skip_clicked,
         )
         self.btn_skip.pack(side="left")
+
+        # Print row
+        print_row = ctk.CTkFrame(inner, fg_color=BLUE_LIGHT)
+        print_row.pack(fill="x", pady=(8, 0))
+
+        self.btn_print = ctk.CTkButton(
+            print_row, text="Print Photo", width=160, height=32,
+            fg_color=WHITE, hover_color=BLUE_LIGHT,
+            text_color=BLUE, corner_radius=8,
+            border_color=BLUE, border_width=1,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            command=self._print_clicked,
+        )
+        self.btn_print.pack(side="left")
 
     # ── Log ──
 
@@ -331,6 +366,8 @@ class App(ctk.CTk):
 
     def _skip_clicked(self):
         self.log(f"Skipped: {self._pending_file}", "warning")
+        if self._on_skip:
+            self._on_skip()
         self.hide_send_panel()
 
     def _browse(self, entry, is_folder):
@@ -344,13 +381,16 @@ class App(ctk.CTk):
             entry.delete(0, "end")
             entry.insert(0, path)
 
-    def _save_clicked(self):
+    def _print_clicked(self):
+        self.btn_print.configure(state="disabled")
+        self._update_status("Printing...", BLUE)
+        self._on_print()
+
+    def _save_and_start_clicked(self):
         data = {key: entry.get() for key, entry in self.entries.items()}
+        data["printer_name"] = self.printer_var.get()
         self._on_save(data)
         self.log("Settings saved.", "success")
-        self._update_status("Settings saved", BLUE)
-
-    def _start_clicked(self):
         self.btn_start.configure(state="disabled")
         self.btn_stop.configure(state="normal")
         self.status_dot.configure(text="Watching...", text_color=BLUE)
@@ -400,4 +440,6 @@ class App(ctk.CTk):
 
     def get_config(self):
         """Return current values from the form as a dict."""
-        return {key: entry.get() for key, entry in self.entries.items()}
+        data = {key: entry.get() for key, entry in self.entries.items()}
+        data["printer_name"] = self.printer_var.get()
+        return data
