@@ -1,6 +1,6 @@
 @echo off
 echo Building PhotoboothAutomation.exe ...
-pyinstaller --onefile --windowed --name PhotoboothAutomation main.py
+python -m PyInstaller --onefile --windowed --name PhotoboothAutomation main.py
 echo.
 echo Done! Output: dist\PhotoboothAutomation.exe
 echo.

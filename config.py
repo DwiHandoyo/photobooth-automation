@@ -1,6 +1,9 @@
+import base64
 import json
 import os
 import sys
+
+_OBFUSCATED_PREFIX = "b64:"
 
 CONFIG_FILE = "config.json"
 
@@ -23,6 +26,22 @@ def _config_path():
     return os.path.join(base, CONFIG_FILE)
 
 
+def _encode_password(plain):
+    """Encode a password to base64 for storage."""
+    if not plain or plain.startswith(_OBFUSCATED_PREFIX):
+        return plain
+    encoded = base64.b64encode(plain.encode("utf-8")).decode("utf-8")
+    return _OBFUSCATED_PREFIX + encoded
+
+
+def _decode_password(stored):
+    """Decode a base64-encoded password back to plain text."""
+    if not stored or not stored.startswith(_OBFUSCATED_PREFIX):
+        return stored
+    encoded = stored[len(_OBFUSCATED_PREFIX):]
+    return base64.b64decode(encoded.encode("utf-8")).decode("utf-8")
+
+
 def load_config():
     """Load config from JSON file. Creates default if missing."""
     path = _config_path()
@@ -31,15 +50,18 @@ def load_config():
         return dict(DEFAULTS)
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    # Fill in any missing keys with defaults
     for key, value in DEFAULTS.items():
         if key not in data:
             data[key] = value
+    # Decode password for in-memory use
+    data["sender_password"] = _decode_password(data.get("sender_password", ""))
     return data
 
 
 def save_config(data):
-    """Save config dict to JSON file."""
+    """Save config dict to JSON file. Password is obfuscated."""
+    to_save = dict(data)
+    to_save["sender_password"] = _encode_password(to_save.get("sender_password", ""))
     path = _config_path()
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+        json.dump(to_save, f, indent=4, ensure_ascii=False)
